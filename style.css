@@ -79,6 +79,22 @@ html, body {
 }
 .nav-btn:active { background: var(--primary-light); }
 
+/* 今日に戻るボタン */
+.today-btn {
+  background: var(--primary-light);
+  border: none;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 6px;
+}
+.today-btn:hover { background: #d4d9fc; }
+.today-btn:active { background: #c8cef9; }
+
 .view-toggle {
   background: var(--primary-light);
   border: none;
@@ -846,6 +862,21 @@ html, body {
   font-weight: 700;
   font-size: 12px;
   margin-left: auto;
+}
+/* 期限切れBOX内のタスク行：余白を調整 */
+.overdue-box .task-row {
+  background: transparent;
+  border-top: 1px solid #f5c6c2;
+  padding: 8px 0;
+}
+.overdue-box .task-row:hover { background: rgba(255,255,255,0.4); }
+.overdue-box .task-row:first-of-type { border-top: 1px solid #f5c6c2; margin-top: 4px; }
+.task-date-end {
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 12px;
+  margin-left: 6px;
+  white-space: nowrap;
 }
 
 .sec-title {

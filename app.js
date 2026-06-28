@@ -379,11 +379,17 @@ function renderDay() {
   const overdue = applyFilters(overdueAll).sort((a, b) => a.date.localeCompare(b.date));
   if (overdue.length) {
     const box = el('div', 'overdue-box');
-    let h = `<div class="ttl">⚠ 期限切れ・やり残し ${overdue.length}件</div>`;
+    const ttl = el('div', 'ttl');
+    ttl.textContent = `⚠ 期限切れ・やり残し ${overdue.length}件`;
+    box.appendChild(ttl);
     overdue.forEach(t => {
-      h += `<div class="overdue-row"><span>${esc(t.title)}</span><span class="od-date">${t.date.slice(5).replace('-', '/')}</span></div>`;
+      const row = makeTaskRow(t);
+      // 行末に日付バッジ（期限切れの日付）
+      const dateBadge = el('span', 'task-date-end');
+      dateBadge.textContent = t.date.slice(5).replace('-', '/');
+      row.appendChild(dateBadge);
+      box.appendChild(row);
     });
-    box.innerHTML = h;
     cal.appendChild(box);
   }
 
@@ -773,6 +779,7 @@ function setType(t) { typeFilter = t; renderCalendar(); }
 // ── イベントバインド ─────────────────────────────────────────
 document.getElementById('btn-prev').addEventListener('click', () => navigate(-1));
 document.getElementById('btn-next').addEventListener('click', () => navigate(1));
+document.getElementById('btn-today').addEventListener('click', () => { currentDate = new Date(); renderCalendar(); });
 document.getElementById('period-bar').addEventListener('click', e => {
   const b = e.target.closest('.period-btn'); if (b) setPeriod(b.dataset.period);
 });
