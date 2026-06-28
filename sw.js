@@ -11,17 +11,22 @@ firebase.initializeApp({
   appId:             '1:95915166506:web:11afad7c7f10dbc8faac53',
 });
 
-// バックグラウンド受信：data ペイロードで送られてくるので明示的に表示する
-const messaging = firebase.messaging();
-messaging.onBackgroundMessage(payload => {
-  const title = payload.data?.title || 'タスク管理';
-  const body  = payload.data?.body  || '';
-  self.registration.showNotification(title, {
+// FCM Messaging は初期化のみ（onBackgroundMessageは使わず、生のpushイベントで処理）
+firebase.messaging();
+
+// 生の push イベントをハンドリング（data-only / notification / 両方に対応）
+self.addEventListener('push', event => {
+  if (!event.data) return;
+  let payload = {};
+  try { payload = event.data.json(); } catch { payload = { data: { title: event.data.text() } }; }
+  const title = payload.notification?.title || payload.data?.title || 'タスク管理';
+  const body  = payload.notification?.body  || payload.data?.body  || '';
+  event.waitUntil(self.registration.showNotification(title, {
     body,
     icon:  './icon-192.png',
     badge: './icon-192.png',
     tag:   'task-reminder',
-  });
+  }));
 });
 
 // ── PWA キャッシュ（network-first / no-store）────────────────
