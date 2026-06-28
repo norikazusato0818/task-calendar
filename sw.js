@@ -11,18 +11,9 @@ firebase.initializeApp({
   appId:             '1:95915166506:web:11afad7c7f10dbc8faac53',
 });
 
-// バックグラウンドでプッシュを受け取ったときに通知を表示
+// バックグラウンド受信：FCM SDK が notification ペイロードを自動表示するので
+// onBackgroundMessage で showNotification を呼ばない（呼ぶと二重表示になる）
 const messaging = firebase.messaging();
-messaging.onBackgroundMessage(payload => {
-  const title = payload.notification?.title || 'タスク管理';
-  const body  = payload.notification?.body  || '';
-  self.registration.showNotification(title, {
-    body,
-    icon:  './icon-192.png',
-    badge: './icon-192.png',
-    tag:   'task-reminder',
-  });
-});
 
 // ── PWA キャッシュ（network-first / no-store）────────────────
 // taskapp-v4：Firebase Messaging 対応版
