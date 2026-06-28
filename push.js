@@ -24,11 +24,18 @@ function initFirebase() {
   });
   _messaging = firebase.messaging(app);
 
-  // フォアグラウンドでのメッセージ受信（タブが開いているとき）
+  // フォアグラウンド受信（タブ/PWAが開いているとき）：iOSでも動くようSW経由でshowNotification
   _messaging.onMessage(payload => {
-    const title = payload.notification?.title || 'タスク管理';
-    const body  = payload.notification?.body  || '';
-    new Notification(title, { body, icon: './icon-192.png' });
+    const title = payload.data?.title || 'タスク管理';
+    const body  = payload.data?.body  || '';
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, {
+        body,
+        icon:  './icon-192.png',
+        badge: './icon-192.png',
+        tag:   'task-reminder',
+      });
+    });
   });
 
   return _messaging;
