@@ -364,9 +364,15 @@ function renderDay() {
   const cards = el('div', 'dash-cards');
   cards.innerHTML =
     `<div class="dash-card"><div class="lbl">今日</div><div class="num">${todayActive}<small> 件</small></div></div>` +
-    `<div class="dash-card danger"><div class="lbl">期限切れ</div><div class="num">${overdueAll.length}<small> 件</small></div></div>` +
+    `<div class="dash-card danger${overdueAll.length ? ' clickable' : ''}" data-action="overdue"><div class="lbl">期限切れ</div><div class="num">${overdueAll.length}<small> 件</small></div></div>` +
     `<div class="dash-card ok"><div class="lbl">今週完了</div><div class="num">${weekDone}<small> 件</small></div></div>` +
     `<div class="dash-card ok"><div class="lbl">今月完了</div><div class="num">${monthDone}<small> 件</small></div></div>`;
+  // 期限切れカードのクリック：一覧にスクロール
+  cards.querySelector('[data-action="overdue"]').addEventListener('click', () => {
+    if (overdueAll.length === 0) return;
+    const box = cal.querySelector('.overdue-box');
+    if (box) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   cal.appendChild(cards);
 
   // 期限切れ（フィルタ適用）
