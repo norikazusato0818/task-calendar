@@ -1,0 +1,21 @@
+# 進捗メモ・設計書（個人メモ）
+STATUS.md
+設計書.md
+STEP2_Google連携セットアップ手順.md
+
+# 旧VAPID鍵（未使用・参考用）
+VAPID_KEYS.md
+
+# GAS スクリプト（スプシID入り・GASに直接貼るので公開不要）
+gas_*.gs
+
+# プレビュー用（公開不要）
+プレビュー_*.html
+
+# Claude Code 設定
+.claude/
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
+*.swp

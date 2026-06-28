@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="タスク">
+  <title>タスク管理</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css?v=2">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <button id="btn-prev" class="nav-btn">&#8249;</button>
+      <div id="header-title"></div>
+      <button id="btn-next" class="nav-btn">&#8250;</button>
+      <button id="sync-status" class="sync-btn offline" title="クリックしてGoogleでログイン"></button>
+      <button id="btn-push" class="push-btn" title="通知を有効にする">🔕</button>
+    </header>
+
+    <!-- 期間切替：日/週/月/年 -->
+    <div id="period-bar">
+      <button class="period-btn on" data-period="day">日</button>
+      <button class="period-btn" data-period="week">週</button>
+      <button class="period-btn" data-period="month">月</button>
+      <button class="period-btn" data-period="year">年</button>
+    </div>
+
+    <!-- 種別フィルタ：すべて/スポット/定期 -->
+    <div id="type-bar">
+      <button class="type-btn on" data-type="all">すべて</button>
+      <button class="type-btn" data-type="spot">スポット</button>
+      <button class="type-btn" data-type="reg">定期</button>
+    </div>
+
+    <!-- タグ絞り込みバー（app.jsで生成） -->
+    <div id="tag-bar"></div>
+
+    <div id="weekday-labels"></div>
+    <div id="calendar"></div>
+
+    <button id="btn-add" class="fab">＋</button>
+  </div>
+
+  <!-- デイパネル（日付タップ時） -->
+  <div id="day-panel">
+    <div id="day-panel-handle"></div>
+    <div id="day-panel-header">
+      <button id="day-panel-close">✕</button>
+      <h3 id="day-panel-date"></h3>
+      <button id="day-panel-add">＋ 追加</button>
+    </div>
+    <div id="day-panel-tasks"></div>
+  </div>
+
+  <!-- モーダルオーバーレイ -->
+  <div id="modal-overlay"></div>
+
+  <!-- タスク追加・編集モーダル -->
+  <div id="modal">
+    <div id="modal-handle"></div>
+    <div id="modal-header">
+      <button id="modal-cancel">キャンセル</button>
+      <h2 id="modal-title-text">タスクを追加</h2>
+      <button id="modal-save">保存</button>
+    </div>
+    <div id="modal-body">
+      <input type="text" id="task-title" placeholder="タイトル（必須）" maxlength="60" autocomplete="off">
+
+      <div class="field-row">
+        <span class="field-label">日付</span>
+        <input type="date" id="task-date">
+      </div>
+
+      <div class="field-row">
+        <span class="field-label">時刻</span>
+        <input type="time" id="task-time">
+        <button id="btn-clear-time" class="small-btn">クリア</button>
+      </div>
+
+      <!-- 繰り返し設定（プリセット選択） -->
+      <div class="field-row">
+        <span class="field-label">繰り返し</span>
+        <select id="task-repeat">
+          <option value="none">なし（スポット）</option>
+          <option value="daily">毎日</option>
+          <option value="weekly">毎週（この曜日）</option>
+          <option value="biweekly">隔週（この曜日）</option>
+          <option value="monthly">毎月（この日）</option>
+          <option value="lastday">毎月末</option>
+          <option value="monthly-weekday">毎月 第◯曜日</option>
+          <option value="quarterly">四半期（3ヶ月ごと）</option>
+          <option value="halfyear">半年ごと</option>
+          <option value="yearly">毎年（この月日）</option>
+        </select>
+      </div>
+      <!-- 第◯曜日の詳細（毎月 第◯曜日を選んだ時だけ表示） -->
+      <div class="field-row" id="repeat-weekday-row" style="display:none">
+        <span class="field-label">　</span>
+        <select id="repeat-week">
+          <option value="1">第1</option>
+          <option value="2">第2</option>
+          <option value="3">第3</option>
+          <option value="4">第4</option>
+          <option value="last">最終</option>
+        </select>
+        <select id="repeat-weekday">
+          <option value="0">日曜</option>
+          <option value="1">月曜</option>
+          <option value="2">火曜</option>
+          <option value="3">水曜</option>
+          <option value="4">木曜</option>
+          <option value="5">金曜</option>
+          <option value="6">土曜</option>
+        </select>
+      </div>
+      <div id="repeat-preview"></div>
+
+      <!-- タグ選択（複数可・その場で新規追加） -->
+      <div class="field-row field-col">
+        <span class="field-label">タグ</span>
+        <div id="tag-picker"></div>
+      </div>
+
+      <div class="field-row">
+        <span class="field-label">リマインド</span>
+        <select id="task-remind">
+          <option value="none">なし</option>
+          <option value="5min">5分前</option>
+          <option value="30min">30分前</option>
+          <option value="1hour">1時間前</option>
+          <option value="1day">前日 9:00</option>
+        </select>
+      </div>
+
+      <textarea id="task-memo" placeholder="メモ（任意）" rows="3" maxlength="300"></textarea>
+
+      <div id="edit-only">
+        <label class="done-label">
+          <input type="checkbox" id="task-done">
+          <span>完了にする</span>
+        </label>
+        <button id="btn-delete" class="danger-btn">このタスクを削除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK（CDN compat版） -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
+  <script src="sheets.js?v=2"></script>
+  <script src="push.js?v=2"></script>
+  <script src="app.js?v=2"></script>
+</body>
+</html>
