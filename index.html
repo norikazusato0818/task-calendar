@@ -20,6 +20,7 @@
       <div id="header-title"></div>
       <button id="btn-next" class="nav-btn">&#8250;</button>
       <button id="btn-today" class="today-btn" title="今日に戻る">今日</button>
+      <button id="btn-search" class="search-btn" title="タスクを検索">🔍</button>
       <button id="sync-status" class="sync-btn offline" title="クリックしてGoogleでログイン"></button>
       <button id="btn-push" class="push-btn" title="通知を有効にする">🔕</button>
     </header>
@@ -57,6 +58,16 @@
       <button id="day-panel-add">＋ 追加</button>
     </div>
     <div id="day-panel-tasks"></div>
+  </div>
+
+  <!-- 検索パネル -->
+  <div id="search-panel">
+    <div id="search-panel-handle"></div>
+    <div id="search-panel-header">
+      <input type="text" id="search-input" placeholder="タイトル・メモで検索" autocomplete="off">
+      <button id="search-close">✕</button>
+    </div>
+    <div id="search-results"></div>
   </div>
 
   <!-- モーダルオーバーレイ -->
@@ -119,6 +130,18 @@
           <option value="5">金曜</option>
           <option value="6">土曜</option>
         </select>
+      </div>
+      <!-- 繰り返しの終了設定（繰り返しありの時だけ表示） -->
+      <div class="field-row" id="repeat-end-row" style="display:none">
+        <span class="field-label">終了</span>
+        <select id="repeat-end-mode">
+          <option value="none">なし（ずっと繰り返す）</option>
+          <option value="date">日付を指定</option>
+        </select>
+      </div>
+      <div class="field-row" id="repeat-end-date-row" style="display:none">
+        <span class="field-label">　</span>
+        <input type="date" id="repeat-end-date">
       </div>
       <div id="repeat-preview"></div>
 

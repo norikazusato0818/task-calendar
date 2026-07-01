@@ -435,6 +435,76 @@ html, body {
   font-size: 14px;
 }
 
+/* ── 検索パネル ── */
+#search-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  box-shadow: var(--shadow-up);
+  z-index: 95;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1);
+  padding-bottom: env(safe-area-inset-bottom, 12px);
+}
+#search-panel.open { transform: translateY(0); }
+
+#search-panel-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 10px auto 2px;
+  flex-shrink: 0;
+}
+
+#search-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+#search-input {
+  flex: 1;
+  font-size: 15px;
+  border: none;
+  outline: none;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-family: inherit;
+}
+#search-input::placeholder { color: var(--text-muted); }
+#search-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+#search-results {
+  overflow-y: auto;
+  flex: 1;
+}
+.search-row .task-memo-text { color: var(--text-sub); }
+
 /* ── モーダルオーバーレイ ── */
 #modal-overlay {
   position: fixed;
@@ -660,6 +730,7 @@ html, body {
   /* 右端のボタンは絶対位置で固定 */
   #sync-status { position: absolute; right: 76px; }
   #btn-push    { position: absolute; right: 28px; }
+  #btn-search  { position: absolute; right: 124px; }
 
   #weekday-labels {
     padding: 6px 20px 2px;
@@ -687,9 +758,10 @@ html, body {
 
   .fab { right: 36px; bottom: 36px; width: 64px; height: 64px; font-size: 34px; }
 
-  /* モーダル・デイパネルはセンタリング＋幅広め */
+  /* モーダル・デイパネル・検索パネルはセンタリング＋幅広め */
   #modal,
-  #day-panel {
+  #day-panel,
+  #search-panel {
     left: 50%;
     transform: translateX(-50%) translateY(100%);
     width: 560px;
@@ -698,6 +770,7 @@ html, body {
   }
   #modal.open { transform: translateX(-50%) translateY(0); }
   #day-panel.open { transform: translateX(-50%) translateY(0); }
+  #search-panel.open { transform: translateX(-50%) translateY(0); }
 
   #modal-body { padding: 20px 24px; }
   #task-title { font-size: 20px; }
@@ -1013,6 +1086,24 @@ html, body {
 @keyframes spin { to { transform: rotate(360deg); } }
 .push-btn { width:28px; height:28px; border-radius:50%; border:none; cursor:pointer; font-size:14px; background:#e2e8f0; display:flex; align-items:center; justify-content:center; padding:0; }
 .push-btn.enabled { background:#fef9c3; }
+
+/* 検索ボタン（ヘッダー） */
+.search-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+.search-btn:active { background: #cbd5e1; }
 
 /* ── PC幅でダッシュボードを広く ── */
 @media (min-width: 768px) {

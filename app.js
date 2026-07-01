@@ -109,6 +109,7 @@ function occursOn(t, ds) {
   if (!rep) return false;
   const start = rep.start || t.date;
   if (ds < start) return false;
+  if (rep.end && ds > rep.end) return false; // 終了日を過ぎたら発生しない
   const d = parseDate(ds), s = parseDate(start);
   if (rep.unit === 'day') {
     return dayDiff(d, s) % rep.interval === 0;
@@ -155,31 +156,35 @@ function repeatLabel(rep) {
   return '繰り返し';
 }
 
-// プリセット名 → repeat構造を組み立てる（開始日＝そのタスクの日付）
-function buildRepeat(preset, dateStr) {
+// プリセット名 → repeat構造を組み立てる（開始日＝そのタスクの日付、endDate＝終了日 or null）
+function buildRepeat(preset, dateStr, endDate) {
   if (!preset || preset === 'none' || !dateStr) return null;
   const d = parseDate(dateStr);
   const wd = d.getDay();           // 曜日
   const dom = d.getDate();         // 日（◯日）
   const mon = d.getMonth() + 1;    // 月（◯月）
+  let rep = null;
   switch (preset) {
-    case 'daily':     return { unit: 'day',  interval: 1, start: dateStr };
-    case 'weekly':    return { unit: 'week', interval: 1, weekdays: [wd], start: dateStr };
-    case 'biweekly':  return { unit: 'week', interval: 2, weekdays: [wd], start: dateStr };
-    case 'monthly':   return { unit: 'month', interval: 1, monthMode: 'date', monthDate: dom, start: dateStr };
-    case 'lastday':   return { unit: 'month', interval: 1, monthMode: 'lastday', start: dateStr };
+    case 'daily':     rep = { unit: 'day',  interval: 1, start: dateStr }; break;
+    case 'weekly':    rep = { unit: 'week', interval: 1, weekdays: [wd], start: dateStr }; break;
+    case 'biweekly':  rep = { unit: 'week', interval: 2, weekdays: [wd], start: dateStr }; break;
+    case 'monthly':   rep = { unit: 'month', interval: 1, monthMode: 'date', monthDate: dom, start: dateStr }; break;
+    case 'lastday':   rep = { unit: 'month', interval: 1, monthMode: 'lastday', start: dateStr }; break;
     case 'monthly-weekday': {
       // 第◯曜日：サブ選択欄（第何週・曜日）から組み立てる
       const wk = document.getElementById('repeat-week').value;
-      const wd = parseInt(document.getElementById('repeat-weekday').value, 10);
-      return { unit: 'month', interval: 1, monthMode: 'weekday',
-        monthWeek: wk === 'last' ? 'last' : parseInt(wk, 10), monthWeekday: wd, start: dateStr };
+      const wdSel = parseInt(document.getElementById('repeat-weekday').value, 10);
+      rep = { unit: 'month', interval: 1, monthMode: 'weekday',
+        monthWeek: wk === 'last' ? 'last' : parseInt(wk, 10), monthWeekday: wdSel, start: dateStr };
+      break;
     }
-    case 'quarterly': return { unit: 'month', interval: 3, monthMode: 'date', monthDate: dom, start: dateStr };
-    case 'halfyear':  return { unit: 'month', interval: 6, monthMode: 'date', monthDate: dom, start: dateStr };
-    case 'yearly':    return { unit: 'year', interval: 1, yearMonth: mon, monthDate: dom, start: dateStr };
+    case 'quarterly': rep = { unit: 'month', interval: 3, monthMode: 'date', monthDate: dom, start: dateStr }; break;
+    case 'halfyear':  rep = { unit: 'month', interval: 6, monthMode: 'date', monthDate: dom, start: dateStr }; break;
+    case 'yearly':    rep = { unit: 'year', interval: 1, yearMonth: mon, monthDate: dom, start: dateStr }; break;
     default: return null;
   }
+  if (endDate) rep.end = endDate;
+  return rep;
 }
 
 // repeat構造 → プリセット名の逆引き（モーダルのselect復元用）
@@ -207,6 +212,7 @@ function nextOccurrences(rep, count) {
   const dummy = { repeat: rep };
   for (let i = 0; i < 366 * 6 && out.length < count; i++) {
     const ds = toDateStr(d);
+    if (rep.end && ds > rep.end) break; // 終了日を過ぎたら打ち切り
     if (occursOn(dummy, ds)) out.push(ds);
     d.setDate(d.getDate() + 1);
   }
@@ -229,10 +235,14 @@ function prevOccurrence(t, beforeDs) {
   return null;
 }
 
-// 「第◯曜日」のサブ欄の表示/非表示を、選択中プリセットに合わせる
+// 「第◯曜日」サブ欄・終了設定欄の表示/非表示を、選択中プリセットに合わせる
 function syncRepeatControls() {
-  const show = document.getElementById('task-repeat').value === 'monthly-weekday';
-  document.getElementById('repeat-weekday-row').style.display = show ? 'flex' : 'none';
+  const preset = document.getElementById('task-repeat').value;
+  const isRepeat = preset !== 'none';
+  document.getElementById('repeat-weekday-row').style.display = preset === 'monthly-weekday' ? 'flex' : 'none';
+  document.getElementById('repeat-end-row').style.display = isRepeat ? 'flex' : 'none';
+  const endMode = document.getElementById('repeat-end-mode').value;
+  document.getElementById('repeat-end-date-row').style.display = (isRepeat && endMode === 'date') ? 'flex' : 'none';
 }
 // サブ欄（第何週・曜日）をその日付の値で初期化
 function initWeekdayControlsFromDate() {
@@ -255,15 +265,26 @@ function updateRepeatPreview() {
   const box = document.getElementById('repeat-preview');
   const preset = document.getElementById('task-repeat').value;
   const dateStr = document.getElementById('task-date').value;
-  const rep = buildRepeat(preset, dateStr);
+  const endMode = document.getElementById('repeat-end-mode').value;
+  const endDate = endMode === 'date' ? document.getElementById('repeat-end-date').value : null;
+  const rep = buildRepeat(preset, dateStr, endDate);
   if (!rep) { box.style.display = 'none'; box.innerHTML = ''; return; }
   const occ = nextOccurrences(rep, 3);
-  if (!occ.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  if (!occ.length) {
+    box.innerHTML = `<span class="rp-label">${esc(repeatLabel(rep))}</span>この設定では発生日がありません（終了日をご確認ください）`;
+    box.style.display = 'block';
+    return;
+  }
   const labels = occ.map(ds => {
     const d = parseDate(ds);
     return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAYS[d.getDay()]}）`;
   });
-  box.innerHTML = `<span class="rp-label">${esc(repeatLabel(rep))}</span>次回：${labels.join('、')} …`;
+  let html = `<span class="rp-label">${esc(repeatLabel(rep))}</span>次回：${labels.join('、')} …`;
+  if (rep.end) {
+    const ed = parseDate(rep.end);
+    html += `<br>${ed.getMonth() + 1}/${ed.getDate()}を最後に終了します`;
+  }
+  box.innerHTML = html;
   box.style.display = 'block';
 }
 
@@ -588,6 +609,88 @@ function makeTaskRow(task) {
   return row;
 }
 
+// ── 検索 ─────────────────────────────────────────────────────
+function searchTasks(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return tasks.filter(t =>
+    t.title.toLowerCase().includes(q) || (t.memo || '').toLowerCase().includes(q)
+  );
+}
+
+// 検索結果1件分の行（スポットは日付、定期は頻度＋次回発生日を表示。チェックはできない）
+function makeSearchRow(task) {
+  const row = el('div', 'task-row search-row' + (!task.repeat && task.done ? ' done' : ''));
+
+  const info = el('div', 'task-info');
+  const title = el('div', 'task-title-text');
+  title.textContent = task.title;
+  info.appendChild(title);
+
+  const sub = el('div', 'task-memo-text');
+  if (task.repeat) {
+    const next = nextOccurrences(task.repeat, 1)[0];
+    sub.textContent = next ? `${repeatLabel(task.repeat)}・次回 ${formatDate(next)}` : `${repeatLabel(task.repeat)}・今後の発生なし`;
+  } else {
+    sub.textContent = formatDate(task.date) + (task.time ? ` ${task.time}` : '') + (task.done ? '・完了済み' : '');
+  }
+  info.appendChild(sub);
+  row.appendChild(info);
+
+  if (task.tags && task.tags.length) {
+    const tg = el('div', 'task-tags');
+    task.tags.forEach(id => {
+      const g = findTag(id);
+      if (g) {
+        const b = el('span', 'task-tag');
+        b.textContent = g.name;
+        b.style.background = g.color + '22';
+        b.style.color = g.color;
+        tg.appendChild(b);
+      }
+    });
+    row.appendChild(tg);
+  }
+
+  row.onclick = () => { closeSearch(); setTimeout(() => openModal(task.id), 260); };
+  return row;
+}
+
+function renderSearchResults(query) {
+  const container = document.getElementById('search-results');
+  container.innerHTML = '';
+  const q = query.trim();
+  if (!q) {
+    container.innerHTML = '<div class="panel-empty">タイトルやメモに含まれる言葉で検索できます</div>';
+    return;
+  }
+  const results = searchTasks(q).sort((a, b) => a.date.localeCompare(b.date));
+  if (results.length === 0) {
+    container.innerHTML = '<div class="panel-empty">見つかりませんでした</div>';
+    return;
+  }
+  results.forEach(t => container.appendChild(makeSearchRow(t)));
+}
+
+function openSearch() {
+  const panel = document.getElementById('search-panel');
+  const input = document.getElementById('search-input');
+  input.value = '';
+  renderSearchResults('');
+  panel.style.display = 'flex';
+  requestAnimationFrame(() => panel.classList.add('open'));
+  const overlay = document.getElementById('modal-overlay');
+  overlay.classList.add('show');
+  overlay.onclick = () => closeSearch();
+  setTimeout(() => input.focus(), 300);
+}
+function closeSearch() {
+  const panel = document.getElementById('search-panel');
+  panel.classList.remove('open');
+  panel.addEventListener('transitionend', () => { panel.style.display = ''; }, { once: true });
+  closeOverlay();
+}
+
 // ── デイパネル ───────────────────────────────────────────────
 function openDayPanel(dateStr) {
   dayPanelDate = dateStr;
@@ -648,6 +751,8 @@ function openModal(taskId = null, prefillDate = null) {
       document.getElementById('repeat-week').value = String(t.repeat.monthWeek);
       document.getElementById('repeat-weekday').value = String(t.repeat.monthWeekday);
     }
+    document.getElementById('repeat-end-mode').value = (t.repeat && t.repeat.end) ? 'date' : 'none';
+    document.getElementById('repeat-end-date').value = (t.repeat && t.repeat.end) || '';
     modalTags = (t.tags || []).slice();
     titleText.textContent = 'タスクを編集';
     editOnly.style.display = 'flex';
@@ -658,6 +763,8 @@ function openModal(taskId = null, prefillDate = null) {
     document.getElementById('task-remind').value = 'none';
     document.getElementById('task-memo').value = '';
     document.getElementById('task-repeat').value = 'none';
+    document.getElementById('repeat-end-mode').value = 'none';
+    document.getElementById('repeat-end-date').value = '';
     modalTags = [];
     titleText.textContent = 'タスクを追加';
     editOnly.style.display = 'none';
@@ -740,7 +847,9 @@ function saveTask() {
   const time = document.getElementById('task-time').value;
   const remind = document.getElementById('task-remind').value;
   const memo = document.getElementById('task-memo').value.trim();
-  const repeat = buildRepeat(document.getElementById('task-repeat').value, date);
+  const endMode = document.getElementById('repeat-end-mode').value;
+  const endDate = endMode === 'date' ? document.getElementById('repeat-end-date').value : null;
+  const repeat = buildRepeat(document.getElementById('task-repeat').value, date, endDate);
   const now = new Date().toISOString();
 
   if (editingId) {
@@ -804,6 +913,9 @@ function setType(t) { typeFilter = t; renderCalendar(); }
 document.getElementById('btn-prev').addEventListener('click', () => navigate(-1));
 document.getElementById('btn-next').addEventListener('click', () => navigate(1));
 document.getElementById('btn-today').addEventListener('click', () => { currentDate = new Date(); renderCalendar(); });
+document.getElementById('btn-search').addEventListener('click', openSearch);
+document.getElementById('search-close').addEventListener('click', closeSearch);
+document.getElementById('search-input').addEventListener('input', e => renderSearchResults(e.target.value));
 document.getElementById('period-bar').addEventListener('click', e => {
   const b = e.target.closest('.period-btn'); if (b) setPeriod(b.dataset.period);
 });
@@ -827,6 +939,8 @@ document.getElementById('task-repeat').addEventListener('change', onRepeatChange
 document.getElementById('task-date').addEventListener('change', updateRepeatPreview);
 document.getElementById('repeat-week').addEventListener('change', updateRepeatPreview);
 document.getElementById('repeat-weekday').addEventListener('change', updateRepeatPreview);
+document.getElementById('repeat-end-mode').addEventListener('change', () => { syncRepeatControls(); updateRepeatPreview(); });
+document.getElementById('repeat-end-date').addEventListener('change', updateRepeatPreview);
 document.getElementById('task-title').addEventListener('keydown', e => {
   if (e.key === 'Enter') saveTask();
 });
