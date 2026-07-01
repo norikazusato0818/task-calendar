@@ -213,6 +213,22 @@ function nextOccurrences(rep, count) {
   return out;
 }
 
+// beforeDs より前で最も近い発生日（YYYY-MM-DD）。開始日より前に無ければ null
+function prevOccurrence(t, beforeDs) {
+  const rep = t.repeat;
+  if (!rep) return null;
+  const start = rep.start || t.date;
+  const d = parseDate(beforeDs);
+  d.setDate(d.getDate() - 1); // 前日から遡る
+  for (let i = 0; i < 366 * 6; i++) {
+    const ds = toDateStr(d);
+    if (ds < start) return null;   // 開始日より前は発生しない
+    if (occursOn(t, ds)) return ds;
+    d.setDate(d.getDate() - 1);
+  }
+  return null;
+}
+
 // 「第◯曜日」のサブ欄の表示/非表示を、選択中プリセットに合わせる
 function syncRepeatControls() {
   const show = document.getElementById('task-repeat').value === 'monthly-weekday';
@@ -357,7 +373,15 @@ function renderDay() {
 
   // サマリーカード（実際の今日を基準にした指標）
   const todayActive = tasks.filter(t => !t.repeat && t.date === today && !t.done).length;
-  const overdueAll = tasks.filter(t => !t.repeat && t.date < today && !t.done);
+  // 期限切れ：スポット（過去日・未完了）＋定期（直近の過去回が未完了）
+  const overdueSpot = tasks.filter(t => !t.repeat && t.date < today && !t.done);
+  const overdueRepeat = [];
+  tasks.forEach(t => {
+    if (!t.repeat) return;
+    const prev = prevOccurrence(t, today);
+    if (prev && !(t.doneDates || []).includes(prev)) overdueRepeat.push(expandOcc(t, prev));
+  });
+  const overdueAll = [...overdueSpot, ...overdueRepeat];
   const weekDone = tasks.filter(t => !t.repeat && t.done && inThisWeek(t.date)).length;
   const monthDone = tasks.filter(t => !t.repeat && t.done && inThisMonth(t.date)).length;
 
