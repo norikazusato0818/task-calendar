@@ -49,6 +49,7 @@ let typeFilter = 'all';      // 'all' | 'spot' | 'reg'
 let tagFilter = [];          // 選択中タグIDの配列（空＝すべて）
 let currentDate = new Date();
 let editingId = null;
+let editingOccDate = null;   // 定期タスクを「特定の回」から開いた場合の、その回の日付
 let dayPanelDate = null;
 let modalTags = [];          // モーダル編集中のタグ選択
 
@@ -62,6 +63,7 @@ function toDateStr(d) {
 }
 function todayStr() { return toDateStr(new Date()); }
 function parseDate(s) { return new Date(s + 'T00:00:00'); }
+function addDays(ds, n) { const d = parseDate(ds); d.setDate(d.getDate() + n); return toDateStr(d); }
 function getWeekDays(base) {
   const d = new Date(base);
   d.setDate(d.getDate() - d.getDay());
@@ -107,6 +109,7 @@ function dayDiff(a, b) { return Math.round((a - b) / 86400000); }
 function occursOn(t, ds) {
   const rep = t.repeat;
   if (!rep) return false;
+  if (t.skipDates && t.skipDates.includes(ds)) return false; // 「この日のみ変更・削除」で除外された日
   const start = rep.start || t.date;
   if (ds < start) return false;
   if (rep.end && ds > rep.end) return false; // 終了日を過ぎたら発生しない
@@ -605,7 +608,7 @@ function makeTaskRow(task) {
     row.appendChild(tm);
   }
 
-  row.onclick = () => openModal(task.id);
+  row.onclick = () => openModal(task.id, null, task._occ ? task.date : null);
   return row;
 }
 
@@ -728,8 +731,10 @@ function closeDayPanel() {
 }
 
 // ── モーダル ─────────────────────────────────────────────────
-function openModal(taskId = null, prefillDate = null) {
+// occDate：定期タスクを「特定の回」から開いた場合、その回の発生日
+function openModal(taskId = null, prefillDate = null, occDate = null) {
   editingId = taskId;
+  editingOccDate = occDate;
   const modal = document.getElementById('modal');
   const overlay = document.getElementById('modal-overlay');
   const titleText = document.getElementById('modal-title-text');
@@ -741,11 +746,11 @@ function openModal(taskId = null, prefillDate = null) {
     const t = tasks.find(x => x.id === taskId);
     if (!t) return;
     titleInput.value = t.title;
-    document.getElementById('task-date').value = t.date;
+    document.getElementById('task-date').value = occDate || t.date;
     document.getElementById('task-time').value = t.time || '';
     document.getElementById('task-remind').value = t.remind || 'none';
     document.getElementById('task-memo').value = t.memo || '';
-    document.getElementById('task-done').checked = t.done;
+    document.getElementById('task-done').checked = occDate ? (t.doneDates || []).includes(occDate) : t.done;
     document.getElementById('task-repeat').value = repeatPreset(t.repeat);
     if (t.repeat && t.repeat.monthMode === 'weekday') {
       document.getElementById('repeat-week').value = String(t.repeat.monthWeek);
@@ -821,6 +826,7 @@ function closeModal() {
   modal.addEventListener('transitionend', () => {
     modal.style.display = '';
     editingId = null;
+    editingOccDate = null;
     if (dayPanelDate) {
       document.getElementById('modal-overlay').onclick = () => {
         closeDayPanel();
@@ -837,8 +843,86 @@ function closeOverlay() {
   overlay.onclick = null;
 }
 
+// ── 繰り返しタスクの適用範囲を確認するダイアログ ───────────────
+// action: '変更' | '削除'。選択結果を 'this' | 'future' | null(キャンセル) で返す
+function askScope(action) {
+  return new Promise(resolve => {
+    document.getElementById('scope-dialog-text').textContent = `この繰り返しタスクをどの範囲で${action}しますか？`;
+    document.getElementById('scope-this').textContent = `この日のみ${action}`;
+    document.getElementById('scope-future').textContent = `これ以降すべて${action}`;
+    const dialog = document.getElementById('scope-dialog');
+    dialog.style.display = 'flex';
+    const finish = result => { dialog.style.display = 'none'; resolve(result); };
+    document.getElementById('scope-this').onclick = () => finish('this');
+    document.getElementById('scope-future').onclick = () => finish('future');
+    document.getElementById('scope-dialog-cancel').onclick = () => finish(null);
+  });
+}
+
 // ── CRUD ─────────────────────────────────────────────────────
-function saveTask() {
+// この日だけ変更：元の繰り返しからこの日を除外し、独立したスポットタスクとして作成
+function editThisOccurrence(original, occDate, v, now) {
+  tasks = tasks.map(t => {
+    if (t.id !== original.id) return t;
+    const skip = new Set(t.skipDates || []);
+    skip.add(occDate);
+    const dd = (t.doneDates || []).filter(d => d !== occDate);
+    return { ...t, skipDates: [...skip], doneDates: dd, updated_at: now };
+  });
+  tasks.push({
+    id: genId(), title: v.title, date: v.date, time: v.time, remind: v.remind, memo: v.memo,
+    tags: v.tags, done: v.done, repeat: null, created_at: now, updated_at: now,
+  });
+}
+// これ以降すべて変更：最初の回なら定義自体を編集、途中の回なら元を前日で終了し新しい繰り返しを作成
+function editFutureOccurrences(original, occDate, v, now) {
+  const isFirst = occDate === (original.repeat.start || original.date);
+  if (isFirst) {
+    tasks = tasks.map(t => {
+      if (t.id !== original.id) return t;
+      const next = { ...t, title: v.title, date: v.date, time: v.time, remind: v.remind, memo: v.memo,
+        repeat: v.repeat, tags: v.tags, done: v.done, updated_at: now };
+      if (next.repeat) next.doneDates = t.doneDates || [];
+      else delete next.doneDates;
+      return next;
+    });
+  } else {
+    tasks = tasks.map(t => {
+      if (t.id !== original.id) return t;
+      return { ...t, repeat: { ...t.repeat, end: addDays(occDate, -1) }, updated_at: now };
+    });
+    const newTask = {
+      id: genId(), title: v.title, date: v.date, time: v.time, remind: v.remind, memo: v.memo,
+      tags: v.tags, done: v.repeat ? false : v.done, repeat: v.repeat, created_at: now, updated_at: now,
+    };
+    if (v.repeat) newTask.doneDates = [];
+    tasks.push(newTask);
+  }
+}
+// この日だけ削除：スキップ登録するのみ
+function deleteThisOccurrence(original, occDate, now) {
+  tasks = tasks.map(t => {
+    if (t.id !== original.id) return t;
+    const skip = new Set(t.skipDates || []);
+    skip.add(occDate);
+    const dd = (t.doneDates || []).filter(d => d !== occDate);
+    return { ...t, skipDates: [...skip], doneDates: dd, updated_at: now };
+  });
+}
+// これ以降すべて削除：最初の回ならタスクごと削除、途中の回なら前日で終了
+function deleteFutureOccurrences(original, occDate, now) {
+  const isFirst = occDate === (original.repeat.start || original.date);
+  if (isFirst) {
+    tasks = tasks.filter(t => t.id !== original.id);
+  } else {
+    tasks = tasks.map(t => {
+      if (t.id !== original.id) return t;
+      return { ...t, repeat: { ...t.repeat, end: addDays(occDate, -1) }, updated_at: now };
+    });
+  }
+}
+
+async function saveTask() {
   const titleInput = document.getElementById('task-title');
   const title = titleInput.value.trim();
   if (!title) { titleInput.classList.add('error'); titleInput.focus(); return; }
@@ -850,21 +934,32 @@ function saveTask() {
   const endMode = document.getElementById('repeat-end-mode').value;
   const endDate = endMode === 'date' ? document.getElementById('repeat-end-date').value : null;
   const repeat = buildRepeat(document.getElementById('task-repeat').value, date, endDate);
+  const done = document.getElementById('task-done').checked;
+  const tags = modalTags.slice();
   const now = new Date().toISOString();
+  const v = { title, date, time, remind, memo, repeat, tags, done };
 
   if (editingId) {
-    tasks = tasks.map(t => {
-      if (t.id !== editingId) return t;
-      const next = { ...t, title, date, time, remind, memo, repeat,
-        tags: modalTags.slice(), done: document.getElementById('task-done').checked, updated_at: now };
-      // 定期なら完了日リストを保持／新規に定期化したら初期化、スポット化したら削除
-      if (repeat) next.doneDates = t.doneDates || [];
-      else delete next.doneDates;
-      return next;
-    });
+    const original = tasks.find(t => t.id === editingId);
+    if (original && original.repeat && editingOccDate) {
+      // 定期タスクの特定の回から開いた編集：範囲を確認
+      const scope = await askScope('変更');
+      if (!scope) return;
+      if (scope === 'this') editThisOccurrence(original, editingOccDate, v, now);
+      else editFutureOccurrences(original, editingOccDate, v, now);
+    } else {
+      tasks = tasks.map(t => {
+        if (t.id !== editingId) return t;
+        const next = { ...t, title, date, time, remind, memo, repeat, tags, done, updated_at: now };
+        // 定期なら完了日リストを保持／新規に定期化したら初期化、スポット化したら削除
+        if (repeat) next.doneDates = t.doneDates || [];
+        else delete next.doneDates;
+        return next;
+      });
+    }
   } else {
     const task = { id: genId(), title, date, time, remind, memo, repeat,
-      tags: modalTags.slice(), done: false, created_at: now, updated_at: now };
+      tags, done: false, created_at: now, updated_at: now };
     if (repeat) task.doneDates = [];
     tasks.push(task);
   }
@@ -873,9 +968,21 @@ function saveTask() {
   renderCalendar();
   if (dayPanelDate) renderDayPanelTasks();
 }
-function deleteTask() {
-  if (!editingId || !confirm('このタスクを削除しますか？')) return;
-  tasks = tasks.filter(t => t.id !== editingId);
+async function deleteTask() {
+  if (!editingId) return;
+  const original = tasks.find(t => t.id === editingId);
+  if (!original) return;
+  const now = new Date().toISOString();
+
+  if (original.repeat && editingOccDate) {
+    const scope = await askScope('削除');
+    if (!scope) return;
+    if (scope === 'this') deleteThisOccurrence(original, editingOccDate, now);
+    else deleteFutureOccurrences(original, editingOccDate, now);
+  } else {
+    if (!confirm('このタスクを削除しますか？')) return;
+    tasks = tasks.filter(t => t.id !== editingId);
+  }
   saveTasks();
   closeModal();
   renderCalendar();

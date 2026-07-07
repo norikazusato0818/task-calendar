@@ -713,6 +713,59 @@ html, body {
 }
 .danger-btn:active { background: #ffeaea; }
 
+/* ── 繰り返しタスクの適用範囲を確認するダイアログ ── */
+#scope-dialog {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.4);
+  padding: 20px;
+}
+#scope-dialog-card {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 20px;
+  width: 100%;
+  max-width: 300px;
+  box-shadow: var(--shadow);
+}
+#scope-dialog-text {
+  font-size: 14px;
+  color: var(--text-sub);
+  margin-bottom: 16px;
+  line-height: 1.6;
+  text-align: center;
+}
+.scope-btn {
+  display: block;
+  width: 100%;
+  background: var(--primary-light);
+  color: var(--primary);
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  font-family: inherit;
+}
+.scope-btn:active { background: #d4d9fc; }
+.scope-cancel-btn {
+  display: block;
+  width: 100%;
+  background: none;
+  color: var(--text-muted);
+  border: none;
+  font-size: 14px;
+  padding: 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
 /* ── デスクトップ対応 ── */
 @media (min-width: 768px) {
   #header {
