@@ -11,8 +11,8 @@ const SHEETS_CONFIG = {
   tagSheet:      'タグ',
 };
 
-// スプレッドシートの列定義
-const TASK_COLS = ['id','title','date','time','remind','memo','done','tags','repeat','doneDates','created_at','updated_at'];
+// スプレッドシートの列定義（deleted＝削除済みの墓石。2台同期のマージ用に90日残す）
+const TASK_COLS = ['id','title','date','time','remind','memo','done','tags','repeat','doneDates','created_at','updated_at','deleted'];
 const TAG_COLS  = ['id','name','color'];
 
 let _tokenClient   = null;
@@ -158,12 +158,14 @@ async function loadFromSheets() {
     await _ensureSheets();
 
     // タスク
-    const taskRes = await _get(`${SHEETS_CONFIG.taskSheet}!A:L`);
+    const taskRes = await _get(`${SHEETS_CONFIG.taskSheet}!A:M`);
     const taskRows = (taskRes.values || []).slice(1); // 1行目ヘッダーを除く
     const tasks = taskRows.filter(r => r[0]).map(r => {
       const t = {};
       TASK_COLS.forEach((col, i) => { t[col] = r[i] !== undefined ? r[i] : ''; });
       t.done   = t.done === 'true';
+      t.deleted = t.deleted === 'true';
+      if (!t.deleted) delete t.deleted; // 生きているタスクにはフィールド自体を持たせない
       t.time   = t.time   || '';
       t.remind = t.remind || 'none';
       t.memo   = t.memo   || '';
@@ -211,7 +213,7 @@ async function saveTasksToSheets(tasks) {
       if (typeof v === 'object') return JSON.stringify(v);
       return String(v);
     }));
-    await _clear(`${SHEETS_CONFIG.taskSheet}!A:L`);
+    await _clear(`${SHEETS_CONFIG.taskSheet}!A:M`);
     await _put(`${SHEETS_CONFIG.taskSheet}!A1`, [TASK_COLS, ...rows]);
     sheetsState.syncing  = false;
     sheetsState.lastSync = new Date();

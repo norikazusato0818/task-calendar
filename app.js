@@ -5,14 +5,27 @@
 // ══════════════════════════════════════════════════════════════
 
 // ── データ：タスク ───────────────────────────────────────────
+// 削除したタスクは「墓石」（deleted:true）として90日残す。
+// 2台同期のマージで「削除」と「他端末の追加」を区別するために必要。
 const STORAGE_KEY = 'taskapp_v1';
 function loadTasks() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
   catch { return []; }
 }
 function saveTasks() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-  saveTasksToSheets(tasks); // バックグラウンドでSheets同期（未ログイン時は無視）
+  cleanTombstones();
+  const all = [...tasks, ...tombstones];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  saveTasksToSheets(all); // バックグラウンドでSheets同期（未ログイン時は無視）
+}
+// タスク → 墓石（remindも消して通知が飛ばないようにする）
+function makeTombstone(t, now) {
+  return { ...t, deleted: true, remind: 'none', updated_at: now };
+}
+// 90日を過ぎた墓石を掃除
+function cleanTombstones() {
+  const cutoff = new Date(Date.now() - 90 * 86400000).toISOString();
+  tombstones = tombstones.filter(t => (t.updated_at || '') > cutoff);
 }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -42,7 +55,9 @@ function saveTags() {
 function findTag(id) { return tagsMaster.find(t => t.id === id); }
 
 // ── 状態 ────────────────────────────────────────────────────
-let tasks = loadTasks();
+const _allStored = loadTasks();
+let tasks = _allStored.filter(t => !t.deleted);
+let tombstones = _allStored.filter(t => t.deleted);
 let tagsMaster = loadTags();
 let period = 'day';          // 'day' | 'week' | 'month' | 'year'（起動時はダッシュボード）
 let typeFilter = 'all';      // 'all' | 'spot' | 'reg'
@@ -79,6 +94,24 @@ function byTime(a, b) {
   if (!b.time) return -1;
   return a.time.localeCompare(b.time);
 }
+// テキスト中のURLをクリック可能なリンクにしながら要素へ流し込む（DOM APIで組むのでXSS安全）
+function linkifyInto(elm, text) {
+  const re = /(https?:\/\/[^\s<>"]+)/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) elm.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const a = document.createElement('a');
+    a.href = m[0];
+    a.textContent = m[0];
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.onclick = e => e.stopPropagation(); // 行クリック（編集モーダル）を発火させない
+    elm.appendChild(a);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) elm.appendChild(document.createTextNode(text.slice(last)));
+}
+
 // 代表タグ（先頭）の色。タグなしは灰色
 function tagColor(t) {
   if (t.tags && t.tags.length) { const g = findTag(t.tags[0]); if (g) return g.color; }
@@ -573,7 +606,7 @@ function makeTaskRow(task) {
   info.appendChild(title);
   if (task.memo) {
     const m = el('div', 'task-memo-text');
-    m.textContent = task.memo;
+    linkifyInto(m, task.memo);
     info.appendChild(m);
   }
 
@@ -914,6 +947,7 @@ function deleteFutureOccurrences(original, occDate, now) {
   const isFirst = occDate === (original.repeat.start || original.date);
   if (isFirst) {
     tasks = tasks.filter(t => t.id !== original.id);
+    tombstones.push(makeTombstone(original, now));
   } else {
     tasks = tasks.map(t => {
       if (t.id !== original.id) return t;
@@ -982,6 +1016,7 @@ async function deleteTask() {
   } else {
     if (!confirm('このタスクを削除しますか？')) return;
     tasks = tasks.filter(t => t.id !== editingId);
+    tombstones.push(makeTombstone(original, now));
   }
   saveTasks();
   closeModal();
@@ -1033,6 +1068,15 @@ document.getElementById('btn-add').addEventListener('click', () => openModal());
 document.getElementById('modal-cancel').addEventListener('click', closeModal);
 document.getElementById('modal-save').addEventListener('click', saveTask);
 document.getElementById('btn-delete').addEventListener('click', deleteTask);
+// 複製：フォーム内容を保ったまま「新規作成モード」に切り替える（保存で別タスクとして追加される）
+document.getElementById('btn-duplicate').addEventListener('click', () => {
+  editingId = null;
+  editingOccDate = null;
+  document.getElementById('task-done').checked = false;
+  document.getElementById('modal-title-text').textContent = 'タスクを追加（コピー）';
+  document.getElementById('edit-only').style.display = 'none';
+  document.getElementById('task-title').focus();
+});
 document.getElementById('day-panel-close').addEventListener('click', closeDayPanel);
 document.getElementById('day-panel-add').addEventListener('click', () => {
   const date = dayPanelDate;
@@ -1052,25 +1096,51 @@ document.getElementById('task-title').addEventListener('keydown', e => {
   if (e.key === 'Enter') saveTask();
 });
 
+// ── アプリ更新チェック ───────────────────────────────────────
+// version.json をロード時・画面復帰時・30分ごとに確認し、変わっていたらトーストを出す
+let _appVersion = null;
+async function checkAppUpdate() {
+  try {
+    const res = await fetch('version.json', { cache: 'no-store' });
+    const j = await res.json();
+    if (_appVersion === null) { _appVersion = j.version; return; }
+    if (j.version !== _appVersion) document.getElementById('update-toast').style.display = 'block';
+  } catch {} // オフライン時などは静かにスキップ
+}
+document.getElementById('update-toast').addEventListener('click', () => location.reload());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkAppUpdate();
+});
+setInterval(checkAppUpdate, 30 * 60 * 1000);
+checkAppUpdate();
+
 // ── Service Worker（プッシュはSTEP3で本格利用）──
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 // ── Google Sheets 同期 ────────────────────────────────────────
-// ログイン後にSheetsからロードしてUIを更新するコールバック
+// ローカルとSheetsをidで突き合わせ、updated_atが新しい方を採用（last-write-wins）。
+// 削除は墓石（deleted:true）同士で比較されるので、他端末での削除も正しく反映される。
+function mergeTaskLists(localAll, remoteAll) {
+  const map = new Map();
+  localAll.forEach(t => map.set(t.id, t));
+  remoteAll.forEach(r => {
+    const l = map.get(r.id);
+    if (!l || (r.updated_at || '') > (l.updated_at || '')) map.set(r.id, r);
+  });
+  return [...map.values()];
+}
+
+// ログイン後にSheetsとマージしてUIを更新するコールバック
 async function onSheetsSignedIn(ok) {
   if (!ok) return;
   const data = await loadFromSheets();
   if (!data) return;
-  if (data.tasks.length === 0 && tasks.length > 0) {
-    // 初回同期：Sheetsが空でローカルにデータがある→ローカルをSheetsに上げる
-    saveTasksToSheets(tasks);
-  } else if (data.tasks.length > 0) {
-    // Sheetsにデータあり→Sheetsを正としてローカルを上書き
-    tasks = data.tasks;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-  }
+  const merged = mergeTaskLists([...tasks, ...tombstones], data.tasks);
+  tasks = merged.filter(t => !t.deleted);
+  tombstones = merged.filter(t => t.deleted);
+  saveTasks(); // ローカル保存＋マージ結果をSheetsへ書き戻し
   if (data.tags && data.tags.length) {
     tagsMaster = data.tags;
     localStorage.setItem(TAGS_KEY, JSON.stringify(tagsMaster));

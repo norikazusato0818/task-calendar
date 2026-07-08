@@ -329,6 +329,10 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.task-memo-text a {
+  color: var(--primary);
+  text-decoration: underline;
+}
 
 /* ── FAB ── */
 .fab {
@@ -712,6 +716,42 @@ html, body {
   transition: background 0.12s;
 }
 .danger-btn:active { background: #ffeaea; }
+
+/* 複製ボタン（編集モーダル内） */
+.dup-btn {
+  width: 100%;
+  background: none;
+  border: 1.5px solid var(--primary);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 11px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.dup-btn:active { background: var(--primary-light); }
+
+/* ── アプリ更新通知トースト ── */
+#update-toast {
+  display: none;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 100px);
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 24px;
+  box-shadow: 0 4px 18px rgba(79,110,247,0.45);
+  z-index: 120;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#update-toast:active { transform: translateX(-50%) scale(0.97); }
 
 /* ── 繰り返しタスクの適用範囲を確認するダイアログ ── */
 #scope-dialog {
