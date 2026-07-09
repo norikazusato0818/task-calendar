@@ -62,6 +62,7 @@ let tagsMaster = loadTags();
 let period = 'day';          // 'day' | 'week' | 'month' | 'year'（起動時はダッシュボード）
 let typeFilter = 'all';      // 'all' | 'spot' | 'reg'
 let tagFilter = [];          // 選択中タグIDの配列（空＝すべて）
+let hideDone = localStorage.getItem('taskapp_hidedone') === 'true'; // 完了タスクを隠す
 let currentDate = new Date();
 let editingId = null;
 let editingOccDate = null;   // 定期タスクを「特定の回」から開いた場合の、その回の日付
@@ -117,12 +118,14 @@ function tagColor(t) {
   if (t.tags && t.tags.length) { const g = findTag(t.tags[0]); if (g) return g.color; }
   return '#9aa3b2';
 }
-// 種別・タグの絞り込みを適用
-function applyFilters(arr) {
+// 種別・タグ・完了の絞り込みを適用
+// keepDone=true：完了も残す（年ビューの完了集計や、完了数カウント用）
+function applyFilters(arr, keepDone = false) {
   return arr.filter(t => {
     if (typeFilter === 'reg' && !t.repeat) return false;   // 定期＝繰り返しあり
     if (typeFilter === 'spot' && t.repeat) return false;   // スポット＝繰り返しなし
     if (tagFilter.length && !(t.tags && t.tags.some(id => tagFilter.includes(id)))) return false;
+    if (hideDone && !keepDone && t.done) return false;     // 完了を隠す設定
     return true;
   });
 }
@@ -398,6 +401,10 @@ function syncPeriodUI() {
 function renderTypeBar() {
   document.querySelectorAll('#type-bar .type-btn')
     .forEach(b => b.classList.toggle('on', b.dataset.type === typeFilter));
+  // 完了表示トグル（ラベルは「押したらどうなるか」を表す）
+  const hd = document.getElementById('btn-hide-done');
+  hd.classList.toggle('on', hideDone);
+  hd.textContent = hideDone ? '完了を表示' : '完了を隠す';
 }
 function renderTagBar() {
   const bar = document.getElementById('tag-bar');
@@ -474,11 +481,12 @@ function renderDay() {
     cal.appendChild(box);
   }
 
-  // 対象日のタスク
-  const list = applyFilters(tasksOnDate(viewDate)).sort(byTime);
+  // 対象日のタスク（カウンターは完了を隠していても正しい数を出す）
+  const fullList = applyFilters(tasksOnDate(viewDate), true).sort(byTime);
+  const list = hideDone ? fullList.filter(t => !t.done) : fullList;
   const sec = el('div', 'sec-title');
   const heading = viewDate === today ? '今日のタスク' : `${currentDate.getMonth() + 1}月${currentDate.getDate()}日のタスク`;
-  sec.innerHTML = `<span>${heading}</span><small>${list.filter(t => t.done).length}/${list.length} 完了</small>`;
+  sec.innerHTML = `<span>${heading}</span><small>${fullList.filter(t => t.done).length}/${fullList.length} 完了</small>`;
   cal.appendChild(sec);
 
   const lw = el('div', 'dash-list');
@@ -570,7 +578,8 @@ function renderYear() {
 
   const months = Array.from({ length: 12 }, (_, i) => {
     const m = String(i + 1).padStart(2, '0');
-    const inMonth = applyFilters(tasks.filter(t => !t.repeat && t.date.startsWith(`${year}-${m}`)));
+    // keepDone=true：完了を隠す設定でも年間の完了集計は正しく出す
+    const inMonth = applyFilters(tasks.filter(t => !t.repeat && t.date.startsWith(`${year}-${m}`)), true);
     return { m: i + 1, total: inMonth.length, done: inMonth.filter(t => t.done).length };
   });
   const max = Math.max(1, ...months.map(x => x.total));
@@ -1063,6 +1072,12 @@ document.getElementById('period-bar').addEventListener('click', e => {
 });
 document.getElementById('type-bar').addEventListener('click', e => {
   const b = e.target.closest('.type-btn'); if (b) setType(b.dataset.type);
+});
+document.getElementById('btn-hide-done').addEventListener('click', () => {
+  hideDone = !hideDone;
+  localStorage.setItem('taskapp_hidedone', String(hideDone));
+  renderCalendar();
+  if (dayPanelDate) renderDayPanelTasks();
 });
 document.getElementById('btn-add').addEventListener('click', () => openModal());
 document.getElementById('modal-cancel').addEventListener('click', closeModal);

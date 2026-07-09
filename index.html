@@ -10,7 +10,7 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="apple-touch-icon" href="favicon.svg">
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -33,11 +33,12 @@
       <button class="period-btn" data-period="year">年</button>
     </div>
 
-    <!-- 種別フィルタ：すべて/スポット/定期 -->
+    <!-- 種別フィルタ：すべて/スポット/定期 ＋ 完了の表示切替 -->
     <div id="type-bar">
       <button class="type-btn on" data-type="all">すべて</button>
       <button class="type-btn" data-type="spot">スポット</button>
       <button class="type-btn" data-type="reg">定期</button>
+      <button id="btn-hide-done" class="hidedone-btn">完了を隠す</button>
     </div>
 
     <!-- タグ絞り込みバー（app.jsで生成） -->
@@ -193,6 +194,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
   <script src="sheets.js?v=3"></script>
   <script src="push.js?v=2"></script>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
